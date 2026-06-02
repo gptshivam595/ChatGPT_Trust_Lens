@@ -376,6 +376,10 @@ const normalizeSegment = (value: unknown, index: number, highlightIds: Set<strin
 };
 
 const normalizeSegments = (value: unknown, fallbackText: string, highlightIds: Set<string>) => {
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return [textSegment(textValue(value, fallbackText))];
+  }
+
   const segments = ensureObjectArray(value).map((segment, index) =>
     normalizeSegment(segment, index, highlightIds)
   );

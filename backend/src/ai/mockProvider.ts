@@ -398,7 +398,23 @@ export class MockFinalAnswerGenerator implements FinalAnswerGenerator {
 }
 
 export class MockClaimExtractor implements ClaimExtractor {
-  async extract(_finalAnswer: FinalAnswerResult): Promise<ExtractedClaim[]> {
+  async extract(finalAnswer: FinalAnswerResult): Promise<ExtractedClaim[]> {
+    const trustLens = (finalAnswer as { trustLens?: { claims?: unknown[] } }).trustLens;
+    if (Array.isArray(trustLens?.claims) && trustLens.claims.length > 0) {
+      return trustLens.claims.map((claim, index) => {
+        const record =
+          typeof claim === "object" && claim !== null && !Array.isArray(claim)
+            ? (claim as Record<string, unknown>)
+            : { claim };
+        return {
+          id: typeof record.id === "string" ? record.id : `claim_generated_${index + 1}`,
+          claim: typeof record.claim === "string" ? record.claim : String(record.text ?? claim),
+          type: typeof record.type === "string" ? record.type : "Generated claim",
+          decisionCritical: record.evidenceStatus !== "Supported"
+        };
+      });
+    }
+
     return baseClaims.map((claim) => ({
       id: claim.id,
       claim: claim.claim,
