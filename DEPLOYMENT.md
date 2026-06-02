@@ -79,7 +79,7 @@ Backend service:
 
 ```text
 Root directory: backend
-Build command: npm ci && npm run build
+Build command: npm ci --include=dev && npm run build
 Start command: npm run start
 Health check path: /health
 ```
