@@ -13,14 +13,13 @@ Use this mode for the public clickable demo.
 
 ### Vercel Settings
 
-The repo includes `vercel.json` with:
+The Vercel project root directory is `frontend`, and the repo includes `frontend/vercel.json` with:
 
 ```json
 {
-  "name": "trust-lens",
-  "installCommand": "cd frontend && npm ci",
-  "buildCommand": "cd frontend && npm run build",
-  "outputDirectory": "frontend/dist",
+  "installCommand": "npm ci",
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
   "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
 }
 ```
