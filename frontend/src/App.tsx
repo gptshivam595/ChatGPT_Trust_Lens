@@ -550,6 +550,7 @@ export default function App() {
 
         <Composer
           disabled={state.workflowStep !== "initial"}
+          initial={state.workflowStep === "initial" && state.messages.length === 0}
           value={state.composerValue}
           onChange={(value) => dispatch({ type: "SET_COMPOSER", value })}
           onSubmit={() => dispatch({ type: "SUBMIT_PROMPT" })}

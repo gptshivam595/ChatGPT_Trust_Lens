@@ -67,7 +67,7 @@ export function ChatArea({
   );
 
   return (
-    <main className="min-h-0 flex-1 overflow-y-auto">
+    <main className="min-h-0 flex-1 overflow-y-auto bg-tl-bg">
       <div className="mx-auto flex min-h-full w-full max-w-[760px] flex-col px-4 py-6 sm:px-6 lg:px-8">
         {showEmptyState ? (
           <EmptyState onUseSamplePrompt={onUseSamplePrompt} />

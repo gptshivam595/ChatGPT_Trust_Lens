@@ -25,7 +25,7 @@ export function AppLayout({
 }: AppLayoutProps) {
   return (
     <div className="app-shell bg-tl-bg text-tl-text">
-      <aside className="hidden w-[260px] shrink-0 border-r border-tl-sidebar-muted/60 bg-tl-sidebar text-tl-accent-ink lg:block">
+      <aside className="hidden w-16 shrink-0 border-r border-tl-border bg-tl-surface text-tl-text lg:block">
         {sidebar}
       </aside>
 
@@ -72,7 +72,7 @@ export function AppLayout({
             type="button"
             onClick={onCloseSidebar}
           />
-          <aside className="relative h-full w-full max-w-[340px] bg-tl-sidebar text-tl-accent-ink shadow-tl-soft sm:max-w-[360px]">
+          <aside className="relative h-full w-full max-w-[88px] bg-tl-surface text-tl-text shadow-tl-soft">
             {sidebar}
           </aside>
         </div>
