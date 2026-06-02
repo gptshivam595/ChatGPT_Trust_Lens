@@ -27,11 +27,12 @@ export type SafetyFinding = {
 };
 
 export type PipelineMetadata = {
-  adapter: "mock";
+  adapter: "mock" | "openai";
   template: TemplateRef;
   safetyFindings: SafetyFinding[];
   tokenEstimate: number;
   fallbackReason?: string;
+  model?: string;
 };
 
 export type RetrievedPassage = {

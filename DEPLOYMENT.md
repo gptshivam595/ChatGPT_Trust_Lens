@@ -94,9 +94,11 @@ Keep these values for the mock deployment:
 
 ```text
 NODE_ENV=production
-AI_PROVIDER=mock
+AI_PROVIDER=openai
 RETRIEVAL_PROVIDER=mock
 STORAGE_DRIVER=file
+DEFAULT_MODEL=gpt-4o-mini
+OPENAI_API_KEY=<set in Render only>
 ```
 
 The `file` storage driver works for a demo but is ephemeral on a free web service. Use a database-backed adapter before production data retention matters.

@@ -8,9 +8,16 @@ import {
   MockPromptReadinessEvaluator,
   MockQueryGenerator
 } from "./mockProvider.js";
+import {
+  OpenAiAnswerDirectionPlanner,
+  OpenAiFinalAnswerGenerator,
+  OpenAiImprovedPromptGenerator,
+  OpenAiPromptReadinessEvaluator
+} from "./openaiProvider.js";
 import { MockRetriever } from "./mockRetrieval.js";
 import { createTelemetryEvent, type AiTelemetryEvent } from "./telemetry.js";
 import type { FinalAnswerResult } from "./types.js";
+import type { AppConfig } from "../config.js";
 import type {
   DirectionsInput,
   FinalAnswerInput,
@@ -31,16 +38,37 @@ const timed = async <T>(
 };
 
 export class TrustLensAiOrchestrator {
-  readonly adapter = "mock";
+  readonly adapter: "mock" | "openai";
   readonly retriever = new MockRetriever();
-  private readonly readiness = new MockPromptReadinessEvaluator();
-  private readonly improvedPrompt = new MockImprovedPromptGenerator();
-  private readonly directions = new MockAnswerDirectionPlanner();
-  private readonly finalAnswer = new MockFinalAnswerGenerator();
+  private readonly readiness;
+  private readonly improvedPrompt;
+  private readonly directions;
+  private readonly finalAnswer;
   private readonly claimExtractor = new MockClaimExtractor();
   private readonly queryGenerator = new MockQueryGenerator();
   private readonly claimEvaluator = new MockClaimEvaluator();
   private readonly highlightClassifier = new MockHighlightClassifier();
+
+  constructor(config?: Pick<AppConfig, "aiProvider" | "openaiApiKey" | "defaultModel">) {
+    if (config?.aiProvider === "openai" && config.openaiApiKey) {
+      const options = {
+        apiKey: config.openaiApiKey,
+        model: config.defaultModel
+      };
+      this.adapter = "openai";
+      this.readiness = new OpenAiPromptReadinessEvaluator(options);
+      this.improvedPrompt = new OpenAiImprovedPromptGenerator(options);
+      this.directions = new OpenAiAnswerDirectionPlanner(options);
+      this.finalAnswer = new OpenAiFinalAnswerGenerator(options);
+      return;
+    }
+
+    this.adapter = "mock";
+    this.readiness = new MockPromptReadinessEvaluator();
+    this.improvedPrompt = new MockImprovedPromptGenerator();
+    this.directions = new MockAnswerDirectionPlanner();
+    this.finalAnswer = new MockFinalAnswerGenerator();
+  }
 
   async evaluateReadiness(input: PromptReadinessInput) {
     return timed("prompt_readiness", () => this.readiness.evaluate(input));
@@ -67,7 +95,7 @@ export class TrustLensAiOrchestrator {
     const evaluatedClaims = await this.claimEvaluator.evaluate(claims, passages);
     const highlights = await this.highlightClassifier.classify(finalAnswer, evaluatedClaims);
     const metadata = {
-      adapter: "mock" as const,
+      adapter: this.adapter,
       template: {
         templateId: "trust-lens-recheck",
         version: "2026-06-02.1"

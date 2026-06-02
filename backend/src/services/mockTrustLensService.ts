@@ -6,6 +6,7 @@ import type {
   TrustLensStoreSnapshot
 } from "../persistence/types.js";
 import { TrustLensAiOrchestrator } from "../ai/orchestrator.js";
+import type { AppConfig } from "../config.js";
 import { ApiError } from "../utils/errors.js";
 
 type ClarificationAnswer = {
@@ -459,10 +460,17 @@ const completeRecheckJob = (job: StoredRecheckJob, result: RecheckAiResult): Sto
 };
 
 export class MockTrustLensService {
+  private readonly ai: TrustLensAiOrchestrator;
+
   constructor(
     private readonly store: TrustLensStore,
-    private readonly ai = new TrustLensAiOrchestrator()
-  ) {}
+    aiOrConfig?: TrustLensAiOrchestrator | Pick<AppConfig, "aiProvider" | "openaiApiKey" | "defaultModel">
+  ) {
+    this.ai =
+      aiOrConfig instanceof TrustLensAiOrchestrator
+        ? aiOrConfig
+        : new TrustLensAiOrchestrator(aiOrConfig);
+  }
 
   async createSession(input: CreateSessionInput) {
     return this.store.update((snapshot) => {

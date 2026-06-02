@@ -5,8 +5,10 @@ export type AppConfig = {
   corsOrigins: string[];
   storageDriver: "file" | "memory";
   dataDir: string;
-  aiProvider: "mock";
+  aiProvider: "mock" | "openai";
   retrievalProvider: "mock";
+  openaiApiKey?: string;
+  defaultModel: string;
   bodyLimitBytes: number;
   rateLimitMax: number;
   rateLimitWindow: string;
@@ -40,6 +42,11 @@ const parseStorageDriver = (value: string | undefined): AppConfig["storageDriver
   return "file";
 };
 
+const parseAiProvider = (value: string | undefined): AppConfig["aiProvider"] => {
+  if (value === "openai") return "openai";
+  return "mock";
+};
+
 const parsePositiveInteger = (
   value: string | undefined,
   fallback: number,
@@ -60,6 +67,14 @@ export const validateConfig = (config: AppConfig): string[] => {
     issues.push("DATA_DIR cannot be empty.");
   }
 
+  if (config.aiProvider === "openai" && !config.openaiApiKey) {
+    issues.push("OPENAI_API_KEY is required when AI_PROVIDER=openai.");
+  }
+
+  if (config.aiProvider === "openai" && (config.defaultModel ?? "").trim().length === 0) {
+    issues.push("DEFAULT_MODEL cannot be empty.");
+  }
+
   return issues;
 };
 
@@ -70,8 +85,10 @@ export const loadConfig = (): AppConfig => ({
   corsOrigins: parseCorsOrigins(process.env.CORS_ORIGIN),
   storageDriver: parseStorageDriver(process.env.STORAGE_DRIVER),
   dataDir: process.env.DATA_DIR ?? "data",
-  aiProvider: "mock",
+  aiProvider: parseAiProvider(process.env.AI_PROVIDER),
   retrievalProvider: "mock",
+  openaiApiKey: process.env.OPENAI_API_KEY,
+  defaultModel: process.env.DEFAULT_MODEL ?? "gpt-4o-mini",
   bodyLimitBytes: parsePositiveInteger(process.env.BODY_LIMIT_BYTES, 1_000_000),
   rateLimitMax: parsePositiveInteger(process.env.RATE_LIMIT_MAX, 60),
   rateLimitWindow: process.env.RATE_LIMIT_WINDOW ?? "1 minute"

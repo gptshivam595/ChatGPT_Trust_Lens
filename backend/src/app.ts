@@ -32,7 +32,7 @@ export const buildApp = async (config: AppConfig = loadConfig()) => {
   app.addSchema(contracts.common);
   const store = createTrustLensStore(config);
   await store.init();
-  const trustLensService = new MockTrustLensService(store);
+  const trustLensService = new MockTrustLensService(store, config);
   const metrics = new MetricsCollector();
 
   await app.register(helmet, {

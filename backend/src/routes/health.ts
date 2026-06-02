@@ -13,7 +13,7 @@ export const registerHealthRoutes = async (app: FastifyInstance, config: AppConf
   app.get("/ready", async (request) =>
     successEnvelope(request, {
       status: "ready",
-      mode: "mock",
+      mode: config.aiProvider,
       dependencies: {
         contracts: "loaded",
         storage: config.storageDriver,
@@ -21,7 +21,8 @@ export const registerHealthRoutes = async (app: FastifyInstance, config: AppConf
         retrievalProvider: config.retrievalProvider,
         database: "not_configured",
         redis: "not_configured",
-        llmProvider: "not_configured"
+        llmProvider: config.aiProvider === "openai" ? "configured" : "not_configured",
+        model: config.defaultModel
       }
     })
   );
