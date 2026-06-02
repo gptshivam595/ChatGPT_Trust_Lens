@@ -460,7 +460,19 @@ export class MockClaimEvaluator implements ClaimEvaluator {
 }
 
 export class MockHighlightClassifier implements HighlightClassifier {
-  async classify(_answer: FinalAnswerResult, _claims: EvaluatedClaim[]) {
-    return baseHighlights;
+  async classify(answer: FinalAnswerResult, claims: EvaluatedClaim[]) {
+    const answerHighlights = (answer as { highlights?: HighlightDefinition[] }).highlights;
+    if (Array.isArray(answerHighlights) && answerHighlights.length > 0) {
+      return answerHighlights;
+    }
+
+    return claims.slice(0, 4).map((claim, index) => ({
+      id: `hl_generated_${index + 1}`,
+      kind: claim.evidenceStatus === "Assumption/inference" ? "assumption" : "verify",
+      label: claim.evidenceStatus === "Assumption/inference" ? "Assumption" : "Verify",
+      text: claim.claim,
+      tooltipTitle: claim.evidenceStatus,
+      tooltipBody: claim.whyVerify
+    }));
   }
 }

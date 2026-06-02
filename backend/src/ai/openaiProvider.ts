@@ -352,7 +352,7 @@ const ensureHighlight = (
     id: normalizeId(record.id, `hl_openai_${index + 1}`),
     kind: safeKind,
     label: labels[safeKind],
-    text: textValue(record.text ?? record.claim, "claim to review"),
+    text: textValue(record.text ?? record.claim ?? record.phrase ?? record.quote ?? record.content, "claim to review"),
     tooltipTitle: textValue(record.tooltipTitle, labels[safeKind]),
     tooltipBody: textValue(
       record.tooltipBody ?? record.reason,
@@ -363,7 +363,7 @@ const ensureHighlight = (
 
 const normalizeSegment = (value: unknown, index: number, highlightIds: Set<string>) => {
   const record = isRecord(value) ? value : { text: value };
-  const text = textValue(record.text, "");
+  const text = textValue(record.text ?? record.content ?? record.label ?? record.title, "");
   if (record.type === "highlight" && text && highlightIds.has(textValue(record.highlightId, ""))) {
     return {
       type: "highlight",
@@ -409,14 +409,17 @@ const normalizeBlocks = (
     .map((block, index) => {
       const record = isRecord(block) ? block : { type: "paragraph", segments: [{ text: block }] };
       if (record.type === "heading") {
-        return { type: "heading", text: textValue(record.text ?? record.title, "Generated Answer") };
+        return {
+          type: "heading",
+          text: textValue(record.text ?? record.title ?? record.heading ?? record.content, "Generated Answer")
+        };
       }
       if (record.type === "section") {
         return {
           type: "section",
-          title: textValue(record.title, `Section ${index + 1}`),
+          title: textValue(record.title ?? record.heading, `Section ${index + 1}`),
           segments: normalizeSegments(
-            record.segments ?? record.text,
+            record.segments ?? record.content ?? record.body ?? record.text,
             "The generated answer needs review before use.",
             highlightIds
           )
@@ -426,7 +429,7 @@ const normalizeBlocks = (
         return {
           type: "list",
           items: normalizeListItems(
-            record.items,
+            record.items ?? record.bullets ?? record.points,
             "Review this generated point before acting.",
             highlightIds
           )
@@ -435,7 +438,7 @@ const normalizeBlocks = (
       return {
         type: "paragraph",
         segments: normalizeSegments(
-          record.segments ?? record.text,
+          record.segments ?? record.content ?? record.body ?? record.text,
           "The generated answer needs review before use.",
           highlightIds
         )
@@ -548,7 +551,11 @@ const sanitizeFinalAnswer = (data: FinalAnswerResult, input: FinalAnswerInput) =
           )
         ];
   const highlightIds = new Set(safeHighlights.map((highlight) => String(highlight.id)));
-  const blocks = normalizeBlocks(candidate.blocks, input, highlightIds);
+  const blocks = normalizeBlocks(
+    candidate.blocks ?? candidate.sections ?? candidate.answer ?? candidate.content,
+    input,
+    highlightIds
+  );
   const qualityRows = ensureObjectArray(trustLens.qualityRows).map(normalizeFinalQualityRow);
   const assumptions = ensureObjectArray(trustLens.assumptions).map(normalizeAssumption);
   const missingContext = ensureObjectArray(trustLens.missingContext).map(normalizeMissingContext);
