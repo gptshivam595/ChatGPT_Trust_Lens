@@ -90,6 +90,26 @@ const textValue = (value: unknown, fallback: string) => {
   return fallback;
 };
 
+const collectPlainText = (value: unknown, depth = 0): string => {
+  if (depth > 4 || value == null) return "";
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => collectPlainText(item, depth + 1))
+      .filter(Boolean)
+      .join(" ");
+  }
+  if (isRecord(value)) {
+    return Object.entries(value)
+      .filter(([key]) => !["id", "type", "kind", "highlightId", "sourceId"].includes(key))
+      .map(([, item]) => collectPlainText(item, depth + 1))
+      .filter(Boolean)
+      .join(" ");
+  }
+  return "";
+};
+
 const slugify = (value: unknown, fallback: string) => {
   const text = textValue(value, fallback)
     .toLowerCase()
@@ -352,7 +372,10 @@ const ensureHighlight = (
     id: normalizeId(record.id, `hl_openai_${index + 1}`),
     kind: safeKind,
     label: labels[safeKind],
-    text: textValue(record.text ?? record.claim ?? record.phrase ?? record.quote ?? record.content, "claim to review"),
+    text: textValue(
+      record.text ?? record.claim ?? record.phrase ?? record.quote ?? record.content,
+      collectPlainText(record) || "claim to review"
+    ),
     tooltipTitle: textValue(record.tooltipTitle, labels[safeKind]),
     tooltipBody: textValue(
       record.tooltipBody ?? record.reason,
@@ -363,7 +386,10 @@ const ensureHighlight = (
 
 const normalizeSegment = (value: unknown, index: number, highlightIds: Set<string>) => {
   const record = isRecord(value) ? value : { text: value };
-  const text = textValue(record.text ?? record.content ?? record.label ?? record.title, "");
+  const text = textValue(
+    record.text ?? record.content ?? record.label ?? record.title ?? record.description,
+    collectPlainText(record)
+  );
   if (record.type === "highlight" && text && highlightIds.has(textValue(record.highlightId, ""))) {
     return {
       type: "highlight",
@@ -403,7 +429,8 @@ const normalizeListItems = (value: unknown, fallbackText: string, highlightIds: 
 const normalizeBlocks = (
   value: unknown,
   input: FinalAnswerInput,
-  highlightIds: Set<string>
+  highlightIds: Set<string>,
+  fallbackText: string
 ) => {
   const blocks = ensureObjectArray(value)
     .map((block, index) => {
@@ -419,8 +446,14 @@ const normalizeBlocks = (
           type: "section",
           title: textValue(record.title ?? record.heading, `Section ${index + 1}`),
           segments: normalizeSegments(
-            record.segments ?? record.content ?? record.body ?? record.text,
-            "The generated answer needs review before use.",
+            record.segments ??
+              record.content ??
+              record.body ??
+              record.text ??
+              record.description ??
+              record.details ??
+              collectPlainText(record),
+            fallbackText,
             highlightIds
           )
         };
@@ -429,8 +462,8 @@ const normalizeBlocks = (
         return {
           type: "list",
           items: normalizeListItems(
-            record.items ?? record.bullets ?? record.points,
-            "Review this generated point before acting.",
+            record.items ?? record.bullets ?? record.points ?? record.steps,
+            fallbackText,
             highlightIds
           )
         };
@@ -438,8 +471,14 @@ const normalizeBlocks = (
       return {
         type: "paragraph",
         segments: normalizeSegments(
-          record.segments ?? record.content ?? record.body ?? record.text,
-          "The generated answer needs review before use.",
+          record.segments ??
+            record.content ??
+            record.body ??
+            record.text ??
+            record.description ??
+            record.details ??
+            collectPlainText(record),
+          fallbackText,
           highlightIds
         )
       };
@@ -452,7 +491,7 @@ const normalizeBlocks = (
         { type: "heading", text: "Generated Answer" },
         {
           type: "paragraph",
-          segments: [textSegment(`Response for: ${input.selectedPrompt.slice(0, 220)}`)]
+          segments: [textSegment(fallbackText || `Response for: ${input.selectedPrompt.slice(0, 220)}`)]
         }
       ];
 };
@@ -551,10 +590,15 @@ const sanitizeFinalAnswer = (data: FinalAnswerResult, input: FinalAnswerInput) =
           )
         ];
   const highlightIds = new Set(safeHighlights.map((highlight) => String(highlight.id)));
+  const fallbackAnswerText = textValue(
+    trustLens.summary,
+    `Response for: ${input.selectedPrompt.slice(0, 220)}`
+  );
   const blocks = normalizeBlocks(
     candidate.blocks ?? candidate.sections ?? candidate.answer ?? candidate.content,
     input,
-    highlightIds
+    highlightIds,
+    fallbackAnswerText
   );
   const qualityRows = ensureObjectArray(trustLens.qualityRows).map(normalizeFinalQualityRow);
   const assumptions = ensureObjectArray(trustLens.assumptions).map(normalizeAssumption);
