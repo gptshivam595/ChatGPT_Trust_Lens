@@ -1,0 +1,33 @@
+services:
+  - type: web
+    name: trust-lens-backend
+    env: node
+    plan: free
+    rootDir: backend
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start
+    healthCheckPath: /health
+    autoDeploy: false
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: info
+      - key: STORAGE_DRIVER
+        value: file
+      - key: DATA_DIR
+        value: data
+      - key: AI_PROVIDER
+        value: mock
+      - key: RETRIEVAL_PROVIDER
+        value: mock
+      - key: BODY_LIMIT_BYTES
+        value: "1000000"
+      - key: RATE_LIMIT_MAX
+        value: "60"
+      - key: RATE_LIMIT_WINDOW
+        value: 1 minute
+      - key: CORS_ORIGIN
+        sync: false

@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trust-lens.local/contracts/prompt-readiness.response.schema.json",
+  "title": "Prompt Readiness Response",
+  "type": "object",
+  "required": ["data", "meta"],
+  "properties": {
+    "data": {
+      "type": "object",
+      "required": ["readinessId", "riskBadge", "explanation", "riskChips", "qualityRows", "clarifyingQuestions"],
+      "properties": {
+        "readinessId": { "type": "string", "minLength": 1 },
+        "riskBadge": { "type": "string", "const": "Medium answer-quality risk" },
+        "explanation": { "type": "string", "minLength": 1 },
+        "riskChips": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "label"],
+            "properties": {
+              "id": { "type": "string" },
+              "label": { "type": "string" }
+            },
+            "additionalProperties": false
+          },
+          "minItems": 1
+        },
+        "qualityRows": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "label", "level"],
+            "properties": {
+              "id": { "type": "string" },
+              "label": { "type": "string" },
+              "level": {
+                "type": "string",
+                "enum": ["Low", "Medium", "Medium to High", "High"]
+              }
+            },
+            "additionalProperties": false
+          },
+          "minItems": 1
+        },
+        "clarifyingQuestions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "question", "defaultOptionId", "options"],
+            "properties": {
+              "id": { "type": "string" },
+              "question": { "type": "string" },
+              "defaultOptionId": { "type": "string" },
+              "options": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["id", "label"],
+                  "properties": {
+                    "id": { "type": "string" },
+                    "label": { "type": "string" }
+                  },
+                  "additionalProperties": false
+                },
+                "minItems": 1
+              }
+            },
+            "additionalProperties": false
+          },
+          "minItems": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "meta": { "$ref": "common.schema.json#/$defs/Meta" }
+  },
+  "additionalProperties": false
+}

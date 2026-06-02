@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trust-lens.local/contracts/recheck-status.response.schema.json",
+  "title": "Recheck Status Response",
+  "type": "object",
+  "required": ["data", "meta"],
+  "properties": {
+    "data": {
+      "type": "object",
+      "required": ["jobId", "status", "activeStepIndex", "steps"],
+      "properties": {
+        "jobId": { "type": "string", "minLength": 1 },
+        "status": { "type": "string", "enum": ["queued", "running", "complete", "failed"] },
+        "activeStepIndex": { "type": "integer", "minimum": 0 },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "title", "description", "status"],
+            "properties": {
+              "id": { "type": "string" },
+              "title": { "type": "string" },
+              "description": { "type": "string" },
+              "status": { "type": "string", "enum": ["pending", "running", "complete", "failed"] }
+            },
+            "additionalProperties": false
+          }
+        },
+        "summary": {
+          "type": "object",
+          "properties": {
+            "claimsReviewed": { "type": "integer", "minimum": 0 },
+            "supported": { "type": "integer", "minimum": 0 },
+            "needsVerification": { "type": "integer", "minimum": 0 },
+            "assumptionInference": { "type": "integer", "minimum": 0 },
+            "conflictingEvidence": { "type": "integer", "minimum": 0 }
+          },
+          "additionalProperties": false
+        },
+        "claims": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/Claim" }
+        },
+        "highlights": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/Highlight" }
+        },
+        "failureReason": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "meta": { "$ref": "common.schema.json#/$defs/Meta" }
+  },
+  "additionalProperties": false
+}

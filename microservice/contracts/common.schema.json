@@ -1,0 +1,214 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trust-lens.local/contracts/common.schema.json",
+  "title": "Trust Lens Common Contract Definitions",
+  "type": "object",
+  "$defs": {
+    "Meta": {
+      "type": "object",
+      "required": ["requestId", "apiVersion"],
+      "properties": {
+        "requestId": { "type": "string", "minLength": 1 },
+        "apiVersion": { "type": "string", "const": "v1" }
+      },
+      "additionalProperties": false
+    },
+    "ErrorResponse": {
+      "type": "object",
+      "required": ["error", "meta"],
+      "properties": {
+        "error": {
+          "type": "object",
+          "required": ["code", "message"],
+          "properties": {
+            "code": {
+              "type": "string",
+              "enum": [
+                "VALIDATION_ERROR",
+                "UNAUTHORIZED",
+                "FORBIDDEN",
+                "NOT_FOUND",
+                "RATE_LIMITED",
+                "RECHECK_ALREADY_RUNNING",
+                "LLM_PROVIDER_TIMEOUT",
+                "INTERNAL_ERROR"
+              ]
+            },
+            "message": { "type": "string", "minLength": 1 },
+            "details": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["message"],
+                "properties": {
+                  "field": { "type": "string" },
+                  "message": { "type": "string", "minLength": 1 }
+                },
+                "additionalProperties": false
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "meta": { "$ref": "#/$defs/Meta" }
+      },
+      "additionalProperties": false
+    },
+    "PromptMode": {
+      "type": "string",
+      "enum": ["original", "improved"]
+    },
+    "AnswerDirectionId": {
+      "type": "string",
+      "enum": ["summary", "analysis", "decision_ready"]
+    },
+    "HighlightKind": {
+      "type": "string",
+      "enum": ["source", "verify", "assumption", "product_logic"]
+    },
+    "ClaimEvidenceStatus": {
+      "type": "string",
+      "enum": [
+        "Supported",
+        "Needs verification",
+        "Conflicting evidence",
+        "No clear evidence found",
+        "Assumption/inference",
+        "Plausible, needs testing",
+        "Uncertain"
+      ]
+    },
+    "FinalAnswerSegment": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["type", "text"],
+          "properties": {
+            "type": { "const": "text" },
+            "text": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["type", "highlightId", "text"],
+          "properties": {
+            "type": { "const": "highlight" },
+            "highlightId": { "type": "string", "minLength": 1 },
+            "text": { "type": "string", "minLength": 1 }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "FinalAnswerBlock": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["type", "text"],
+          "properties": {
+            "type": { "const": "heading" },
+            "text": { "type": "string", "minLength": 1 }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["type", "segments"],
+          "properties": {
+            "type": { "const": "paragraph" },
+            "segments": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/FinalAnswerSegment" },
+              "minItems": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["type", "title", "segments"],
+          "properties": {
+            "type": { "const": "section" },
+            "title": { "type": "string", "minLength": 1 },
+            "segments": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/FinalAnswerSegment" },
+              "minItems": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["type", "items"],
+          "properties": {
+            "type": { "const": "list" },
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": { "$ref": "#/$defs/FinalAnswerSegment" },
+                "minItems": 1
+              },
+              "minItems": 1
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "Highlight": {
+      "type": "object",
+      "required": ["id", "kind", "label", "text", "tooltipTitle", "tooltipBody"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "kind": { "$ref": "#/$defs/HighlightKind" },
+        "label": {
+          "type": "string",
+          "enum": ["Source", "Verify", "Assumption", "Product logic"]
+        },
+        "text": { "type": "string", "minLength": 1 },
+        "tooltipTitle": { "type": "string", "minLength": 1 },
+        "tooltipBody": { "type": "string", "minLength": 1 },
+        "sourceId": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "Claim": {
+      "type": "object",
+      "required": ["id", "claim", "type", "evidenceStatus", "whyVerify", "suggestedAction"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "claim": { "type": "string", "minLength": 1 },
+        "type": { "type": "string", "minLength": 1 },
+        "evidenceStatus": { "$ref": "#/$defs/ClaimEvidenceStatus" },
+        "whyVerify": { "type": "string", "minLength": 1 },
+        "suggestedAction": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "SourcePassage": {
+      "type": "object",
+      "required": ["id", "title", "urlLabel", "passage", "highlightedSentence"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "title": { "type": "string", "minLength": 1 },
+        "urlLabel": { "type": "string", "minLength": 1 },
+        "passage": { "type": "string", "minLength": 1 },
+        "highlightedSentence": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "ClarificationAnswer": {
+      "type": "object",
+      "required": ["questionId", "optionId", "label"],
+      "properties": {
+        "questionId": { "type": "string", "minLength": 1 },
+        "optionId": { "type": "string", "minLength": 1 },
+        "label": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    }
+  }
+}

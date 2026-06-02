@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trust-lens.local/contracts/recheck-start.request.schema.json",
+  "title": "Recheck Start Request",
+  "type": "object",
+  "required": ["sessionId", "answerId", "mode"],
+  "properties": {
+    "sessionId": { "type": "string", "minLength": 1 },
+    "answerId": { "type": "string", "minLength": 1 },
+    "mode": { "type": "string", "enum": ["claim_level"] },
+    "includeSourcePassages": { "type": "boolean", "default": true }
+  },
+  "additionalProperties": false
+}

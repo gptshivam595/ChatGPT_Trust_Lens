@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trust-lens.local/contracts/recheck-start.response.schema.json",
+  "title": "Recheck Start Response",
+  "type": "object",
+  "required": ["data", "meta"],
+  "properties": {
+    "data": {
+      "type": "object",
+      "required": ["jobId", "status", "activeStepIndex", "steps"],
+      "properties": {
+        "jobId": { "type": "string", "minLength": 1 },
+        "status": { "type": "string", "const": "running" },
+        "activeStepIndex": { "type": "integer", "minimum": 0 },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "title", "description", "status"],
+            "properties": {
+              "id": { "type": "string" },
+              "title": { "type": "string" },
+              "description": { "type": "string" },
+              "status": { "type": "string", "enum": ["pending", "running", "complete"] }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "meta": { "$ref": "common.schema.json#/$defs/Meta" }
+  },
+  "additionalProperties": false
+}

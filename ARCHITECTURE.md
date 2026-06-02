@@ -98,9 +98,21 @@ Mobile layout:
 - Answer direction preview cards stack vertically.
 - Composer stays sticky at the bottom.
 
-## 6. State Machine
+## 6. State Model And State Machines
 
-The prototype is driven by a single app-level state machine.
+The prototype should be driven by one reducer, but not by one overloaded state field.
+
+Use orthogonal state slices:
+
+1. `workflowStep`: where the user is in the main generation flow.
+2. `trustLensOpen`: whether the post-final review panel is visible.
+3. `activeTrustLensTab`: which review tab is selected.
+4. `recheckStatus`: whether deeper review is idle, running, or complete.
+5. `modalState`: source passage, popover, drawer, and toast visibility.
+
+This avoids the architectural bug where `trust_lens_open` becomes both a workflow step and a UI visibility state.
+
+### Main Workflow State Machine
 
 ```mermaid
 stateDiagram-v2
@@ -114,17 +126,12 @@ stateDiagram-v2
     answer_directions_loading --> answer_directions_ready: timed mock generation
     answer_directions_ready --> final_answer_loading: select direction
     final_answer_loading --> final_answer_ready: timed mock generation
-    final_answer_ready --> trust_lens_open: auto-open side panel
-    trust_lens_open --> recheck_running: recheck output
-    final_answer_ready --> recheck_running: recheck output
-    recheck_running --> recheck_complete: timed progress complete
-    recheck_complete --> trust_lens_open: keep panel open with updated results
 ```
 
 Canonical state names:
 
 ```ts
-type AppStep =
+type WorkflowStep =
   | "initial"
   | "prompt_submitted"
   | "prompt_readiness_loading"
@@ -133,24 +140,35 @@ type AppStep =
   | "answer_directions_loading"
   | "answer_directions_ready"
   | "final_answer_loading"
-  | "final_answer_ready"
-  | "trust_lens_open"
-  | "recheck_running"
-  | "recheck_complete";
+  | "final_answer_ready";
+```
+
+### Post-Final Review State
+
+The Trust Lens and Recheck flows are orthogonal to the main workflow:
+
+```mermaid
+stateDiagram-v2
+    [*] --> unavailable
+    unavailable --> available_closed: workflowStep becomes final_answer_ready
+    unavailable --> available_open: workflowStep becomes final_answer_ready and auto-open fires
+    available_closed --> available_open: open Trust Lens
+    available_open --> available_closed: close Trust Lens
+    available_open --> recheck_running: Recheck Output
+    available_closed --> recheck_running: Recheck Output opens panel
+    recheck_running --> recheck_complete: all mock steps complete
+    recheck_complete --> available_open: show completed claims review
 ```
 
 Recommended derived flags:
 
 ```ts
-const hasFinalAnswer = [
-  "final_answer_ready",
-  "trust_lens_open",
-  "recheck_running",
-  "recheck_complete",
-].includes(step);
+const hasFinalAnswer = state.workflowStep === "final_answer_ready";
 
 const canShowTrustLens = hasFinalAnswer;
-const showCollapsedTrustLensRail = hasFinalAnswer && !trustLensOpen;
+const showTrustLensPanel = canShowTrustLens && state.trustLensOpen;
+const showCollapsedTrustLensRail = canShowTrustLens && !state.trustLensOpen;
+const canRunRecheck = hasFinalAnswer && state.recheckStatus !== "running";
 ```
 
 ## 7. App State Model
@@ -178,8 +196,13 @@ type RecheckStatus =
   | "running"
   | "complete";
 
+type ModalState = {
+  sourcePassageOpen: boolean;
+  activeSourceId: string | null;
+};
+
 type AppState = {
-  step: AppStep;
+  workflowStep: WorkflowStep;
   composerValue: string;
   originalPrompt: string;
   editableOriginalPrompt: string;
@@ -190,8 +213,7 @@ type AppState = {
   trustLensOpen: boolean;
   activeTrustLensTab: TrustLensTab;
   activeTooltipId: string | null;
-  sourceModalOpen: boolean;
-  activeSourceId: string | null;
+  modalState: ModalState;
   recheckStatus: RecheckStatus;
   recheckProgressStep: number;
   recheckComplete: boolean;
@@ -277,6 +299,7 @@ type AppAction =
   | { type: "USE_SAMPLE_PROMPT" }
   | { type: "UPDATE_COMPOSER"; value: string }
   | { type: "SUBMIT_PROMPT" }
+  | { type: "START_PROMPT_READINESS" }
   | { type: "PROMPT_READINESS_READY" }
   | { type: "UPDATE_CLARIFICATION"; questionId: string; optionId: string }
   | { type: "GENERATE_IMPROVED_PROMPT" }
@@ -312,8 +335,8 @@ Timed transitions should live in `App` effects or small helper functions:
 - Generate directions -> `answer_directions_loading`.
 - After a short delay -> `answer_directions_ready`.
 - Select direction -> `final_answer_loading`.
-- After a short delay -> `final_answer_ready`, then `trustLensOpen = true`.
-- Recheck -> six progress steps over about 2 seconds, then `recheck_complete`.
+- After a short delay -> `workflowStep = "final_answer_ready"` and `trustLensOpen = true`.
+- Recheck -> `recheckStatus = "running"` for about 2 seconds, then `recheckStatus = "complete"` while `workflowStep` remains `final_answer_ready`.
 
 ## 10. Mock Data Architecture
 
@@ -775,6 +798,8 @@ Respect:
 
 Recommended project structure:
 
+Before creating these files, use `IMPLEMENTATION_CONTRACTS.md` as the exact source for mock data values, TypeScript types, copy constants, component prop interfaces, reducer guards, CSS/Tailwind tokens, package dependencies, and edge cases.
+
 ```text
 src/
   App.tsx
@@ -973,12 +998,15 @@ Decision bar -> Ask alternative view -> Counterargument assistant message append
 
 ## 27. State Transition Table
 
-Use this table as the implementation source of truth for reducer transitions.
+Use this table as the implementation source of truth for reducer transitions. It separates main workflow transitions from panel, modal, and recheck state transitions.
 
-| Current Step | Event | Next Step | Side Effects |
+### Main Workflow Transitions
+
+| Current `workflowStep` | Event | Next `workflowStep` | Side Effects |
 | --- | --- | --- | --- |
 | `initial` | `USE_SAMPLE_PROMPT` | `initial` | Set composer to sample prompt. |
-| `initial` | `SUBMIT_PROMPT` | `prompt_readiness_loading` | Store original prompt, clear composer, append user message. |
+| `initial` | `SUBMIT_PROMPT` | `prompt_submitted` | Store original prompt, clear composer, append user message, reset post-final state. |
+| `prompt_submitted` | internal immediate transition | `prompt_readiness_loading` | Render readiness loading state. |
 | `prompt_readiness_loading` | `PROMPT_READINESS_READY` | `prompt_readiness_ready` | Render readiness card. |
 | `prompt_readiness_ready` | `UPDATE_CLARIFICATION` | `prompt_readiness_ready` | Update selected clarification. |
 | `prompt_readiness_ready` | `EDIT_ORIGINAL_PROMPT` | `prompt_readiness_ready` | Update editable original prompt. |
@@ -989,16 +1017,20 @@ Use this table as the implementation source of truth for reducer transitions.
 | `improved_prompt_ready` | `CONTINUE_WITH_ORIGINAL_PROMPT` | `answer_directions_loading` | Mark selected prompt mode as original. |
 | `answer_directions_loading` | `ANSWER_DIRECTIONS_READY` | `answer_directions_ready` | Render three preview cards. |
 | `answer_directions_ready` | `SELECT_ANSWER_DIRECTION` | `final_answer_loading` | Store selected direction and append loading assistant message. |
-| `final_answer_loading` | `FINAL_ANSWER_READY` | `trust_lens_open` | Render final answer, set Trust Lens open true. |
-| `trust_lens_open` | `CLOSE_TRUST_LENS` | `final_answer_ready` | Hide panel but keep collapsed rail visible. |
-| `final_answer_ready` | `OPEN_TRUST_LENS` | `trust_lens_open` | Reopen panel with previous tab. |
-| `trust_lens_open` | `SET_TRUST_LENS_TAB` | `trust_lens_open` | Switch tab. |
-| `final_answer_ready` or `trust_lens_open` | `START_RECHECK` | `recheck_running` | Open progress UI, set progress index to 0, keep Trust Lens available. |
-| `recheck_running` | `ADVANCE_RECHECK_STEP` | `recheck_running` | Mark current step complete. |
-| `recheck_running` | `COMPLETE_RECHECK` | `recheck_complete` | Set recheck complete, update claim statuses, show summary. |
-| `recheck_complete` | `OPEN_TRUST_LENS` | `recheck_complete` | Keep completed state and open panel. |
-| Any post-final step | `OPEN_SOURCE_MODAL` | Same step | Open source passage modal. |
-| Any step | `SHOW_TOAST` | Same step | Show toast message. |
+| `final_answer_loading` | `FINAL_ANSWER_READY` | `final_answer_ready` | Render final answer, set `trustLensOpen = true`, set `activeTrustLensTab = "quality"`. |
+
+### Orthogonal UI And Review Transitions
+
+| State Slice | Current Value | Event | New Value | Guard |
+| --- | --- | --- | --- | --- |
+| `trustLensOpen` | `false` | `OPEN_TRUST_LENS` | `true` | Only if `workflowStep === "final_answer_ready"`. |
+| `trustLensOpen` | `true` | `CLOSE_TRUST_LENS` | `false` | Only if final answer exists. |
+| `activeTrustLensTab` | Any tab | `SET_TRUST_LENS_TAB` | Requested tab | Only if final answer exists. |
+| `recheckStatus` | `idle` or `complete` | `START_RECHECK` | `running` | Only if final answer exists. |
+| `recheckProgressStep` | `0..5` | `ADVANCE_RECHECK_STEP` | Next step | Only if `recheckStatus === "running"`. |
+| `recheckStatus` | `running` | `COMPLETE_RECHECK` | `complete` | All mock steps have completed. |
+| `modalState` | closed | `OPEN_SOURCE_MODAL` | source modal open | Only for source-backed highlights. |
+| `toast` | any | `SHOW_TOAST` | new toast | Any step. |
 
 Guard rules:
 
@@ -1007,6 +1039,7 @@ Guard rules:
 - `OPEN_TRUST_LENS` should do nothing before final answer exists.
 - `CLOSE_TRUST_LENS` should only change visibility, not reset tab state.
 - `SELECT_ANSWER_DIRECTION` should only be accepted from `answer_directions_ready`.
+- `FINAL_ANSWER_READY` should not set `recheckStatus`; recheck is a separate review process.
 - Timed completion events should be ignored if the user has moved to an incompatible step.
 
 ## 28. Reducer And Timer Design
@@ -1024,7 +1057,7 @@ function appReducer(state: AppState, action: AppAction): AppState {
 
       return {
         ...state,
-        step: "prompt_readiness_loading",
+        workflowStep: "prompt_submitted",
         originalPrompt: prompt,
         editableOriginalPrompt: prompt,
         composerValue: "",
@@ -1035,18 +1068,34 @@ function appReducer(state: AppState, action: AppAction): AppState {
       };
     }
 
+    case "START_PROMPT_READINESS": {
+      if (state.workflowStep !== "prompt_submitted") return state;
+      return { ...state, workflowStep: "prompt_readiness_loading" };
+    }
+
     case "PROMPT_READINESS_READY": {
-      if (state.step !== "prompt_readiness_loading") return state;
-      return { ...state, step: "prompt_readiness_ready" };
+      if (state.workflowStep !== "prompt_readiness_loading") return state;
+      return { ...state, workflowStep: "prompt_readiness_ready" };
     }
 
     case "FINAL_ANSWER_READY": {
-      if (state.step !== "final_answer_loading") return state;
+      if (state.workflowStep !== "final_answer_loading") return state;
       return {
         ...state,
-        step: "trust_lens_open",
+        workflowStep: "final_answer_ready",
         trustLensOpen: true,
         activeTrustLensTab: "quality",
+      };
+    }
+
+    case "START_RECHECK": {
+      if (state.workflowStep !== "final_answer_ready") return state;
+      if (state.recheckStatus === "running") return state;
+      return {
+        ...state,
+        recheckStatus: "running",
+        recheckProgressStep: 0,
+        trustLensOpen: true,
       };
     }
 
@@ -1060,12 +1109,17 @@ Timer orchestration:
 
 ```ts
 useEffect(() => {
-  if (state.step !== "prompt_readiness_loading") return;
+  if (state.workflowStep === "prompt_submitted") {
+    dispatch({ type: "START_PROMPT_READINESS" });
+    return;
+  }
+
+  if (state.workflowStep !== "prompt_readiness_loading") return;
   const timer = window.setTimeout(() => {
     dispatch({ type: "PROMPT_READINESS_READY" });
   }, 800);
   return () => window.clearTimeout(timer);
-}, [state.step]);
+}, [state.workflowStep]);
 ```
 
 Timer durations:
@@ -1081,7 +1135,7 @@ Timer durations:
 Timer safety:
 
 - Always clear timers in effect cleanup.
-- Effects should depend on `state.step`, not on entire state objects.
+- Effects should depend on narrow state slices such as `state.workflowStep` or `state.recheckStatus`, not on entire state objects.
 - Reducer should validate the current step before accepting timed completion events.
 - Starting a new prompt should reset recheck and modal-related state.
 
@@ -1457,12 +1511,14 @@ export const mockSources = [
 Use explicit render gates for every major staged component.
 
 ```ts
-const showEmptyState = state.step === "initial" && !state.originalPrompt;
+const showEmptyState =
+  state.workflowStep === "initial" && !state.originalPrompt;
 
-const showUserPrompt = state.step !== "initial" || Boolean(state.originalPrompt);
+const showUserPrompt =
+  state.workflowStep !== "initial" || Boolean(state.originalPrompt);
 
 const showPromptReadinessLoading =
-  state.step === "prompt_readiness_loading";
+  state.workflowStep === "prompt_readiness_loading";
 
 const showPromptReadinessCard = [
   "prompt_readiness_ready",
@@ -1471,10 +1527,7 @@ const showPromptReadinessCard = [
   "answer_directions_ready",
   "final_answer_loading",
   "final_answer_ready",
-  "trust_lens_open",
-  "recheck_running",
-  "recheck_complete",
-].includes(state.step);
+].includes(state.workflowStep);
 
 const showImprovedPromptPreview = [
   "improved_prompt_ready",
@@ -1482,42 +1535,36 @@ const showImprovedPromptPreview = [
   "answer_directions_ready",
   "final_answer_loading",
   "final_answer_ready",
-  "trust_lens_open",
-  "recheck_running",
-  "recheck_complete",
-].includes(state.step);
+].includes(state.workflowStep);
 
 const showAnswerDirections = [
   "answer_directions_ready",
   "final_answer_loading",
   "final_answer_ready",
-  "trust_lens_open",
-  "recheck_running",
-  "recheck_complete",
-].includes(state.step);
+].includes(state.workflowStep);
 
 const showFinalAnswer = [
   "final_answer_ready",
-  "trust_lens_open",
-  "recheck_running",
-  "recheck_complete",
-].includes(state.step);
+].includes(state.workflowStep);
 ```
 
 Trust Lens gates:
 
 ```ts
-const canShowTrustLens =
-  state.step === "final_answer_ready" ||
-  state.step === "trust_lens_open" ||
-  state.step === "recheck_running" ||
-  state.step === "recheck_complete";
+const hasFinalAnswer = state.workflowStep === "final_answer_ready";
+const canShowTrustLens = hasFinalAnswer;
 
 const showTrustLensPanel =
   canShowTrustLens && state.trustLensOpen;
 
 const showCollapsedTrustLensRail =
   canShowTrustLens && !state.trustLensOpen;
+
+const showRecheckProgress =
+  hasFinalAnswer && state.recheckStatus === "running";
+
+const showRecheckSummary =
+  hasFinalAnswer && state.recheckStatus === "complete";
 ```
 
 Never derive Trust Lens visibility from:
@@ -1780,10 +1827,10 @@ Completion behavior:
 
 ```ts
 case "COMPLETE_RECHECK":
-  if (state.step !== "recheck_running") return state;
+  if (state.workflowStep !== "final_answer_ready") return state;
+  if (state.recheckStatus !== "running") return state;
   return {
     ...state,
-    step: "recheck_complete",
     recheckStatus: "complete",
     recheckComplete: true,
     recheckProgressStep: recheckSteps.length,
@@ -2071,4 +2118,475 @@ This architecture is detailed enough for implementation when it answers:
 - What accessibility requirements must be built into the components?
 - What edge cases should be handled in the prototype?
 
-Any implementation should treat sections 3, 27, 28, 32, and 42 as hard constraints.
+Any implementation should treat sections 3, 27, 28, 32, 42, and 45 through 52 as hard constraints.
+
+## 45. Multi-Disciplinary Architecture Review Findings
+
+This section records the gaps found during a backend, senior-backend, LLM-architecture, product, and macro-architecture review.
+
+### Fixed Gaps
+
+| Review Lens | Gap Found | Architecture Fix |
+| --- | --- | --- |
+| Architect reviewer | Main workflow state was mixed with Trust Lens panel visibility. | Sections 6, 7, 27, 28, and 32 now separate `workflowStep`, `trustLensOpen`, `activeTrustLensTab`, and `recheckStatus`. |
+| Senior backend | Prototype scope said no backend, but did not explain future API boundaries. | Sections 48 and 49 define a non-implementation production evolution path and API contracts. |
+| Backend developer | No validation or error-contract thinking existed for a future service version. | Section 49 defines request/response contracts, error shapes, idempotency, and rate-limit considerations for future production work. |
+| LLM architect | Mock AI stages were named, but not modeled as a future LLM pipeline. | Section 47 defines LLM stages, safety boundaries, evaluation artifacts, and evidence handling. |
+| Senior PM | The architecture listed UI steps, but not product success criteria or activation logic. | Sections 46 and 51 add user outcomes, success metrics, risk-based activation, and delivery risks. |
+| Accessibility/product safety | Source-backed highlights could be misread as final truth. | Sections 12, 17, 35, and 47 reinforce evidence boundaries and judgment-support copy. |
+| Implementation maintainability | Sample reducer and render gates were inconsistent with the state machine. | Sections 27, 28, and 32 now provide consistent implementation rules. |
+
+### Remaining Intentional Constraints
+
+- The implementation remains frontend-only.
+- No backend should be built for the prototype.
+- No real model or retrieval integration should be added.
+- Future backend and LLM sections are architectural runway only.
+- Mock outputs must remain clearly framed as prototype data.
+
+## 46. Product Architecture And Decision Logic
+
+Trust Lens should not behave like a universal always-on audit layer. Its value is highest when the prompt has unclear context, high consequence, or claims that could be reused externally.
+
+### Product Jobs
+
+Primary jobs:
+
+- Help users make better prompts before generation.
+- Help users choose the right answer shape before receiving a long answer.
+- Help users inspect output assumptions, missing context, uncertainty, and claims before acting.
+- Keep the user in control of the final decision.
+
+Non-goals:
+
+- Replace human judgment.
+- Certify correctness.
+- Become a numeric trust score.
+- Make every interaction slower.
+- Turn all casual prompts into evaluation workflows.
+
+### Risk-Based Activation Model
+
+The prototype uses a fixed medium-risk sample, but the architecture should support a future activation model:
+
+| Signal | Low-Risk Behavior | Medium-Risk Behavior | High-Risk Behavior |
+| --- | --- | --- | --- |
+| Missing context | Continue normally. | Ask quick clarification. | Strongly recommend clarification. |
+| Ambiguity | Generate with caveat. | Offer improved prompt. | Require explicit direction choice. |
+| External factual claims | Optional recheck. | Show claims to verify. | Open Trust Lens automatically after final output. |
+| Consequence of use | No panel by default. | Panel after final output. | Panel after final output with prominent review warning. |
+| User intent | Fast answer. | Direction preview. | Direction preview plus verification reminders. |
+
+Prototype simplification:
+
+- Always show Prompt Readiness Check after submit.
+- Always use medium answer-quality risk.
+- Always show three answer directions.
+- Always open Trust Lens after final answer.
+
+Production extension:
+
+- Use risk-based activation to decide whether to show full Trust Lens, a compact review strip, or no automatic review.
+
+### User Success Metrics
+
+Prototype evaluation should focus on comprehension and control, not model accuracy.
+
+Suggested usability metrics:
+
+- User can explain why Trust Lens appears only after the final output.
+- User can identify which claims need verification.
+- User understands that green source-backed labels are not a guarantee.
+- User can choose between original and improved prompt.
+- User can choose an answer direction without confusion.
+- User can find the Recheck Output action without opening a menu.
+- User can close and reopen the Trust Lens panel.
+- User can complete the sample flow without typing.
+
+Future product metrics:
+
+- Improved prompt acceptance rate.
+- Clarification skip rate.
+- Answer direction selection distribution.
+- Recheck Output click-through rate.
+- Claim inspection rate.
+- Source passage open rate.
+- Rate of users choosing `Use as draft` vs `Verify first`.
+- Self-reported trust calibration before and after using Trust Lens.
+
+### Product Trade-Offs
+
+| Trade-Off | Risk | Product Decision |
+| --- | --- | --- |
+| More review vs speed | Too many checks slow simple tasks. | Use risk-based activation in future versions. |
+| Strong labels vs nuance | Users may over-trust labels. | Use cautious labels and avoid numeric trust scores. |
+| Three previews vs choice overload | Users may not want extra decisions. | Make the recommended option visually clear but still optional. |
+| Automatic panel vs interruption | Panel may feel intrusive. | Open only after final answer, with easy close and reopen. |
+| Source evidence vs false confidence | A source may support only one part of a claim. | Source modal must show exact passage and evidence boundary. |
+
+## 47. LLM Architecture Runway For A Future Production Version
+
+The prototype must not call real models, but the architecture should make the mock flow map cleanly to a future LLM system.
+
+### Future LLM Pipeline
+
+```text
+Prompt Input
+  -> Prompt Readiness Evaluator
+  -> Clarification Question Generator
+  -> Improved Prompt Generator
+  -> Answer Direction Planner
+  -> Final Answer Generator
+  -> Claim Extractor
+  -> Query Generator
+  -> Retriever
+  -> Cross-Reference Evaluator
+  -> Highlight Classifier
+  -> Trust Lens Summary Generator
+```
+
+### Stage Responsibilities
+
+| Stage | Responsibility | Prototype Equivalent |
+| --- | --- | --- |
+| Prompt Readiness Evaluator | Detect missing context, ambiguity, high-stakes cues, and verification need. | Static readiness card. |
+| Clarification Question Generator | Ask concise questions that reduce answer-quality risk. | Static three-question form. |
+| Improved Prompt Generator | Rewrite prompt with goal, audience, depth, constraints, and verification needs. | Editable improved prompt template. |
+| Answer Direction Planner | Produce different response strategies before final generation. | Three static direction cards. |
+| Final Answer Generator | Generate answer based on selected direction. | Mock final answer blocks. |
+| Claim Extractor | Identify factual, numeric, technical, causal, and recommendation claims. | Static claim list. |
+| Query Generator | Create retrieval queries for claims needing evidence. | Recheck progress step. |
+| Retriever | Fetch source passages. | Mock sources. |
+| Cross-Reference Evaluator | Compare generated claims with retrieved passages. | Post-recheck labels. |
+| Highlight Classifier | Decide source, verify, assumption, or product-logic highlight. | Static highlight definitions. |
+| Trust Lens Summary Generator | Summarize quality, assumptions, missing context, and alternatives. | Static tab content. |
+
+### Future LLM Artifacts
+
+If this becomes real, each generated answer should be accompanied by structured review artifacts:
+
+```ts
+type GenerationArtifact = {
+  promptId: string;
+  selectedPrompt: string;
+  selectedDirection: AnswerDirectionId;
+  finalAnswer: FinalAnswerBlock[];
+  assumptions: AssumptionItem[];
+  missingContext: MissingContextItem[];
+  extractedClaims: ClaimItem[];
+  highlights: HighlightDefinition[];
+  sourcePassages: SourcePassage[];
+  modelMetadata: {
+    generatorModel: string;
+    evaluatorModel?: string;
+    retrievalIndexVersion?: string;
+    createdAt: string;
+  };
+};
+```
+
+### Safety And Evaluation Boundaries
+
+Future implementation must avoid circular self-verification.
+
+Rules:
+
+- The same model can draft and classify in a prototype, but production should separate generation from evaluation where feasible.
+- Source-backed means "supported by a retrieved passage," not "universally true."
+- Needs-verification means the system has insufficient evidence for confident external use.
+- Assumption/inference means the system inferred context from prompt choices or conversation state.
+- Conflicting evidence should be shown plainly and not hidden in a collapsed detail.
+- Model uncertainty should be communicated in words, not percentages.
+
+### Prompt Injection And Source Safety
+
+Future retrieval must treat external content as untrusted.
+
+Required future defenses:
+
+- Separate source text from model instructions.
+- Strip or neutralize instructions found inside retrieved documents.
+- Keep system/developer prompts outside retrieved context.
+- Log source IDs and retrieval versions for auditability.
+- Show source passages to users without implying full-page endorsement.
+- Avoid sending sensitive user prompts to third-party retrieval providers without consent.
+
+### LLM Evaluation Plan
+
+Future model quality should be measured with task-level and claim-level checks:
+
+- Clarification relevance.
+- Improved prompt usefulness.
+- Direction distinctness.
+- Final answer helpfulness.
+- Claim extraction recall.
+- Evidence-label precision.
+- False-supported-label rate.
+- User over-trust risk.
+- Latency from final answer to Trust Lens panel.
+- Cost per completed Trust Lens review.
+
+## 48. Backend Architecture Runway For A Future Production Version
+
+The current prototype should not implement a backend. This section defines a future-compatible architecture so the frontend can evolve without being rewritten.
+
+### Future Service Boundaries
+
+```text
+Frontend App
+  -> Trust Lens API Gateway
+      -> Prompt Readiness Service
+      -> Prompt Improvement Service
+      -> Answer Direction Service
+      -> Generation Orchestrator
+      -> Claim Review Service
+      -> Retrieval Service
+      -> Source Passage Service
+      -> Event/Telemetry Service
+```
+
+Service boundary guidance:
+
+- Keep generation orchestration separate from source retrieval.
+- Keep claim review separate from answer generation.
+- Keep telemetry separate from user-visible review content.
+- Do not let the frontend calculate authoritative review labels in production.
+- Keep product UI state local; keep durable review artifacts server-side only if persistence is required.
+
+### Future Data Stores
+
+| Store | Purpose | Notes |
+| --- | --- | --- |
+| Relational database | Review sessions, user decisions, artifact metadata. | Use migrations and strict schemas. |
+| Object storage | Large source snapshots or review artifacts. | Store only if needed and permitted. |
+| Vector index | Retrieval over trusted corpora. | Version indexes and embeddings. |
+| Cache | Repeated source lookups, model responses, feature flags. | Cache cautiously; prompts may be sensitive. |
+| Event stream | Async recheck progress and telemetry. | Useful for long-running review jobs. |
+
+Prototype mapping:
+
+- `trustLensMockData.ts` replaces all future services and stores.
+- Timers replace async jobs.
+- Local reducer state replaces session persistence.
+
+### Security And Privacy Principles
+
+Future backend must define:
+
+- Prompt retention policy.
+- Review artifact retention policy.
+- Source snapshot retention policy.
+- Consent boundary for retrieval and telemetry.
+- Authentication and authorization if user data is stored.
+- Audit logging for source-backed and verification labels.
+- Rate limits for expensive recheck actions.
+- Abuse protections for prompt injection and repeated heavy review jobs.
+
+For the prototype:
+
+- No user data leaves the browser.
+- No credentials or API keys are needed.
+- No real telemetry is required.
+
+## 49. Future API Contract Sketch
+
+These contracts are not for the current frontend-only build. They are included to make the architecture backend-ready.
+
+### Endpoint Overview
+
+| Endpoint | Method | Purpose |
+| --- | --- | --- |
+| `/api/trust-lens/readiness` | `POST` | Evaluate prompt readiness. |
+| `/api/trust-lens/improved-prompt` | `POST` | Generate improved prompt from clarification choices. |
+| `/api/trust-lens/directions` | `POST` | Generate answer direction previews. |
+| `/api/trust-lens/final-answer` | `POST` | Generate final answer from selected direction. |
+| `/api/trust-lens/recheck` | `POST` | Start deeper claim review. |
+| `/api/trust-lens/recheck/{jobId}` | `GET` | Poll recheck progress and results. |
+| `/api/trust-lens/sources/{sourceId}` | `GET` | Fetch source passage metadata and passage text. |
+
+### Standard Response Shape
+
+```json
+{
+  "data": {},
+  "meta": {
+    "requestId": "req_123",
+    "prototype": false
+  }
+}
+```
+
+### Standard Error Shape
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "The request body is invalid.",
+    "details": [
+      {
+        "field": "prompt",
+        "message": "Prompt is required."
+      }
+    ]
+  },
+  "meta": {
+    "requestId": "req_123"
+  }
+}
+```
+
+### Example Recheck Start Request
+
+```json
+{
+  "answerId": "ans_123",
+  "mode": "claim_level",
+  "includeSourcePassages": true
+}
+```
+
+### Example Recheck Result Response
+
+```json
+{
+  "data": {
+    "jobId": "job_123",
+    "status": "complete",
+    "summary": {
+      "claimsReviewed": 4,
+      "supported": 1,
+      "needsVerification": 2,
+      "assumptionInference": 1,
+      "conflictingEvidence": 0
+    },
+    "claims": [],
+    "highlights": []
+  },
+  "meta": {
+    "requestId": "req_123"
+  }
+}
+```
+
+### Future Backend Non-Functional Requirements
+
+| Concern | Requirement |
+| --- | --- |
+| Validation | Validate request bodies with a schema library. |
+| Idempotency | `POST /recheck` should accept an idempotency key if recheck can be retried. |
+| Rate limiting | Limit expensive generation and recheck endpoints. |
+| Observability | Include request IDs, structured logs, latency metrics, and error rates. |
+| Auth | Required only if prompts, sessions, or review artifacts persist. |
+| CORS | Restrict to approved app origins in production. |
+| Pagination | Use pagination for historical review sessions if added later. |
+| Versioning | Prefix production API with `/v1` when public contracts stabilize. |
+
+## 50. Architecture Decision Records
+
+### ADR-001: Frontend-Only Prototype
+
+Decision:
+
+- Build only a local frontend prototype with mock data and simulated transitions.
+
+Rationale:
+
+- The current goal is product demonstration, not production infrastructure.
+- Mock data allows complete control over timing, content, and edge cases.
+- No sensitive user data leaves the browser.
+
+Consequence:
+
+- Backend, LLM, retrieval, and persistence concerns are documented as future runway only.
+
+### ADR-002: Orthogonal State Slices
+
+Decision:
+
+- Use `workflowStep`, `trustLensOpen`, `activeTrustLensTab`, `recheckStatus`, and modal/toast state separately.
+
+Rationale:
+
+- Opening a panel is not the same as advancing the generation workflow.
+- Recheck can run while the final answer remains present.
+- Closing the panel should not erase review progress.
+
+Consequence:
+
+- Render gates are simpler and safer.
+- Reducer transitions need explicit guards.
+
+### ADR-003: Structured Final Answer Blocks
+
+Decision:
+
+- Represent the final answer as structured blocks and segments, not HTML strings.
+
+Rationale:
+
+- Inline highlights need accessible behavior.
+- Tooltips, source modals, and recheck labels need stable IDs.
+- String parsing would be brittle.
+
+Consequence:
+
+- Mock content requires more setup, but rendering is safer.
+
+### ADR-004: No Numeric Trust Score
+
+Decision:
+
+- Use labels like `Needs verification`, `Medium confidence`, and `Assumption/inference`.
+
+Rationale:
+
+- Numeric scores can create false precision.
+- The product should support judgment, not automate trust.
+
+Consequence:
+
+- UI copy must remain careful and explanatory.
+
+### ADR-005: Visible Recheck Action
+
+Decision:
+
+- Show `Recheck Output` as a visible button below the final answer and in the Trust Lens Quality tab.
+
+Rationale:
+
+- Recheck is a core concept, not a hidden secondary action.
+
+Consequence:
+
+- Three-dot menu may include recheck, but it cannot be the only entry point.
+
+## 51. Risk Register
+
+| Risk | Probability | Impact | Mitigation |
+| --- | --- | --- | --- |
+| Trust Lens appears before final answer | Medium | High | Enforce `workflowStep === "final_answer_ready"` render gate. |
+| Users interpret green source labels as guaranteed truth | Medium | High | Use cautious labels, exact passages, and evidence-boundary copy. |
+| Flow feels too slow | Medium | Medium | Keep timers short and document future risk-based activation. |
+| State machine becomes hard to implement | Medium | Medium | Use orthogonal state slices and guarded reducer transitions. |
+| Mobile panel overlaps composer | Medium | Medium | Use full-screen drawer under 640px and test small viewports. |
+| Tooltip actions are inaccessible | Medium | High | Treat highlight details as keyboard-accessible popovers. |
+| Recheck feels fake or decorative | Low | Medium | Show claim-level label changes and summary after progress. |
+| Future real LLM evaluation creates false certainty | Medium | High | Separate generation from evaluation, use evidence labels, and avoid numeric scores. |
+| Future backend stores sensitive prompts unnecessarily | Medium | High | Define retention, consent, auth, and audit policies before production work. |
+
+## 52. Review-Driven Acceptance Additions
+
+Add these to the implementation acceptance checklist:
+
+- [ ] `workflowStep` is separate from `trustLensOpen`.
+- [ ] Closing Trust Lens does not change the main workflow.
+- [ ] Recheck does not change the main workflow away from `final_answer_ready`.
+- [ ] The source modal explains that a passage supports only a specific claim.
+- [ ] Claims tab distinguishes pre-recheck and post-recheck labels.
+- [ ] UI copy never says "verified by AI" or implies guaranteed correctness.
+- [ ] Every mock LLM stage maps to a future pipeline stage in Section 47.
+- [ ] No backend/API code is implemented for the prototype.
+- [ ] Future API contracts remain documentation-only unless explicitly requested later.
+- [ ] Product success can be evaluated with the metrics in Section 46.

@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trust-lens.local/contracts/answer-directions.response.schema.json",
+  "title": "Answer Directions Response",
+  "type": "object",
+  "required": ["data", "meta"],
+  "properties": {
+    "data": {
+      "type": "object",
+      "required": ["directions", "recommendedDirectionId"],
+      "properties": {
+        "recommendedDirectionId": { "$ref": "common.schema.json#/$defs/AnswerDirectionId" },
+        "directions": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "type": "object",
+            "required": ["id", "title", "badge", "headline", "description", "cta"],
+            "properties": {
+              "id": { "$ref": "common.schema.json#/$defs/AnswerDirectionId" },
+              "title": { "type": "string" },
+              "badge": { "type": "string" },
+              "headline": { "type": "string" },
+              "description": { "type": "string" },
+              "cta": { "type": "string" },
+              "recommended": { "type": "boolean" }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "meta": { "$ref": "common.schema.json#/$defs/Meta" }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trust-lens.local/contracts/final-answer.request.schema.json",
+  "title": "Final Answer Request",
+  "type": "object",
+  "required": ["sessionId", "selectedPrompt", "selectedPromptMode", "selectedDirectionId"],
+  "properties": {
+    "sessionId": { "type": "string", "minLength": 1 },
+    "selectedPrompt": { "type": "string", "minLength": 1, "maxLength": 12000 },
+    "selectedPromptMode": { "$ref": "common.schema.json#/$defs/PromptMode" },
+    "selectedDirectionId": { "$ref": "common.schema.json#/$defs/AnswerDirectionId" }
+  },
+  "additionalProperties": false
+}

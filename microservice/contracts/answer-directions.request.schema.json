@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trust-lens.local/contracts/answer-directions.request.schema.json",
+  "title": "Answer Directions Request",
+  "type": "object",
+  "required": ["sessionId", "selectedPrompt", "selectedPromptMode"],
+  "properties": {
+    "sessionId": { "type": "string", "minLength": 1 },
+    "selectedPrompt": { "type": "string", "minLength": 1, "maxLength": 12000 },
+    "selectedPromptMode": { "$ref": "common.schema.json#/$defs/PromptMode" },
+    "clarifications": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/ClarificationAnswer" }
+    }
+  },
+  "additionalProperties": false
+}

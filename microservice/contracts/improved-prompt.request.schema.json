@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trust-lens.local/contracts/improved-prompt.request.schema.json",
+  "title": "Improved Prompt Request",
+  "type": "object",
+  "required": ["sessionId", "readinessId", "originalPrompt", "clarifications"],
+  "properties": {
+    "sessionId": { "type": "string", "minLength": 1 },
+    "readinessId": { "type": "string", "minLength": 1 },
+    "originalPrompt": { "type": "string", "minLength": 1, "maxLength": 12000 },
+    "clarifications": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/ClarificationAnswer" },
+      "minItems": 1
+    }
+  },
+  "additionalProperties": false
+}
