@@ -6,6 +6,7 @@ import type {
   HighlightDefinition,
   RecheckStatus,
   RecheckStep,
+  SourcePassage,
   TrustLensTab,
 } from "../state/appTypes";
 import { InlineHighlight } from "./InlineHighlight";
@@ -22,12 +23,12 @@ interface FinalOutputProps {
   recheckProgressStep: number;
   recheckStatus: RecheckStatus;
   recheckSteps: RecheckStep[];
+  sourcePassages: SourcePassage[];
   onAddMissingContextFromSummary: () => void;
   onAskAlternativeView: () => void;
   onClearActiveTooltip: () => void;
   onCopyDraft: () => void;
   onOpenClaimsFromSummary: () => void;
-  onOpenSourceModal: (sourceId: string | null, highlightId: string) => void;
   onShowToast: (message: string) => void;
   onSetActiveTooltip: (highlightId: string) => void;
   onShowInTrustLens: (tab: TrustLensTab) => void;
@@ -41,11 +42,13 @@ function renderSegments(
     FinalOutputProps,
     | "activeTooltipId"
     | "onClearActiveTooltip"
-    | "onOpenSourceModal"
     | "onSetActiveTooltip"
     | "onShowInTrustLens"
     | "onShowToast"
-  > & { highlightsById: Record<string, HighlightDefinition> },
+  > & {
+    highlightsById: Record<string, HighlightDefinition>;
+    sourcesById: Record<string, SourcePassage>;
+  },
 ) {
   return segments.map((segment, index) => {
     if (segment.type === "text") {
@@ -63,10 +66,10 @@ function renderSegments(
         active={props.activeTooltipId === highlight.id}
         highlight={highlight}
         key={highlight.id}
+        source={highlight.sourceId ? props.sourcesById[highlight.sourceId] ?? null : null}
         onAddToRecheck={() => props.onShowToast(toastMessages.addToRecheck)}
         onClear={props.onClearActiveTooltip}
         onOpen={props.onSetActiveTooltip}
-        onOpenSourceModal={props.onOpenSourceModal}
         onShowInTrustLens={props.onShowInTrustLens}
       />
     );
@@ -79,11 +82,13 @@ function renderBlock(
     FinalOutputProps,
     | "activeTooltipId"
     | "onClearActiveTooltip"
-    | "onOpenSourceModal"
     | "onSetActiveTooltip"
     | "onShowInTrustLens"
     | "onShowToast"
-  > & { highlightsById: Record<string, HighlightDefinition> },
+  > & {
+    highlightsById: Record<string, HighlightDefinition>;
+    sourcesById: Record<string, SourcePassage>;
+  },
 ) {
   switch (block.type) {
     case "heading":
@@ -133,12 +138,12 @@ export function FinalOutput({
   recheckProgressStep,
   recheckStatus,
   recheckSteps,
+  sourcePassages,
   onAddMissingContextFromSummary,
   onAskAlternativeView,
   onClearActiveTooltip,
   onCopyDraft,
   onOpenClaimsFromSummary,
-  onOpenSourceModal,
   onSetActiveTooltip,
   onShowInTrustLens,
   onShowToast,
@@ -152,11 +157,18 @@ export function FinalOutput({
     lookup[highlight.id] = highlight;
     return lookup;
   }, {});
+  const sourcesById = sourcePassages.reduce<Record<string, SourcePassage>>(
+    (lookup, source) => {
+      lookup[source.id] = source;
+      return lookup;
+    },
+    {},
+  );
   const segmentProps = {
     activeTooltipId,
     highlightsById,
+    sourcesById,
     onClearActiveTooltip,
-    onOpenSourceModal,
     onSetActiveTooltip,
     onShowInTrustLens,
     onShowToast,

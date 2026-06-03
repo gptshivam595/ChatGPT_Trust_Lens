@@ -1,10 +1,10 @@
-import { useEffect, useReducer, useRef } from "react";
+import { useEffect, useReducer } from "react";
 import { AppLayout } from "./components/AppLayout";
 import { ChatArea } from "./components/ChatArea";
 import { CollapsedTrustLensRail } from "./components/CollapsedTrustLensRail";
 import { Composer } from "./components/Composer";
 import { Sidebar } from "./components/Sidebar";
-import { SourcePassageModal } from "./components/SourcePassageModal";
+import { SourcePage } from "./components/SourcePage";
 import { Toast } from "./components/Toast";
 import { TopBar } from "./components/TopBar";
 import { TrustLensPanel } from "./components/TrustLensPanel";
@@ -14,7 +14,6 @@ import {
   generateImprovedPrompt,
   getAnswerDirections,
   getRecheckStatus,
-  getSourcePassage,
   runPromptReadiness,
   startRecheck,
   trustLensApiModeEnabled,
@@ -24,13 +23,17 @@ import { clarificationQuestions } from "./data/trustLensMockData";
 import { appReducer, createInitialAppState } from "./state/appReducer";
 import type { AnswerDirectionId } from "./state/appTypes";
 
-export default function App() {
+function getSourcePageId() {
+  const match = window.location.pathname.match(/^\/source\/([^/]+)\/?$/);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+function MainApp() {
   const [state, dispatch] = useReducer(
     appReducer,
     clarificationQuestions,
     createInitialAppState,
   );
-  const sourceReturnFocusRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (!state.toast) {
@@ -336,11 +339,6 @@ export default function App() {
     state.recheckSteps.length,
   ]);
 
-  const activeSource =
-    state.sourcePassages.find(
-      (source) => source.id === state.modalState.activeSourceId,
-    ) ?? null;
-
   const handleGenerateImprovedPrompt = async () => {
     const improvedPromptResult = await generateImprovedPrompt({
       sessionId: state.sessionId ?? undefined,
@@ -402,39 +400,6 @@ export default function App() {
       jobId: recheckResult.data.jobId,
       steps: recheckResult.data.steps,
     });
-  };
-
-  const handleOpenSourceModal = async (
-    sourceId: string | null,
-    highlightId: string,
-  ) => {
-    const highlightTrigger = document.querySelector<HTMLElement>(
-      `[data-highlight-trigger='${highlightId}']`,
-    );
-    sourceReturnFocusRef.current =
-      highlightTrigger ??
-      (document.activeElement instanceof HTMLElement ? document.activeElement : null);
-
-    if (sourceId) {
-      const sourceResult = await getSourcePassage(sourceId);
-
-      if (sourceResult.success) {
-        dispatch({
-          type: "CACHE_SOURCE_PASSAGE",
-          source: sourceResult.data.source,
-        });
-      }
-    }
-
-    dispatch({ type: "OPEN_SOURCE_MODAL", sourceId });
-  };
-
-  const handleCloseSourceModal = () => {
-    dispatch({ type: "CLOSE_SOURCE_MODAL" });
-    window.setTimeout(() => {
-      sourceReturnFocusRef.current?.focus();
-      sourceReturnFocusRef.current = null;
-    }, 0);
   };
 
   const handleViewHighlightedOutput = () => {
@@ -538,7 +503,6 @@ export default function App() {
           onOpenMissingContextFromSummary={() =>
             dispatch({ type: "OPEN_MISSING_CONTEXT_FROM_SUMMARY" })
           }
-          onOpenSourceModal={handleOpenSourceModal}
           onShowInTrustLens={(tab) => dispatch({ type: "SHOW_IN_TRUST_LENS", tab })}
           onShowToast={(message) => dispatch({ type: "SHOW_TOAST", message })}
           onStartRecheck={handleStartRecheck}
@@ -558,9 +522,16 @@ export default function App() {
       </AppLayout>
 
       <Toast toast={state.toast} />
-      {state.modalState.sourcePassageOpen ? (
-        <SourcePassageModal source={activeSource} onClose={handleCloseSourceModal} />
-      ) : null}
     </>
   );
+}
+
+export default function App() {
+  const sourceId = getSourcePageId();
+
+  if (sourceId) {
+    return <SourcePage sourceId={sourceId} />;
+  }
+
+  return <MainApp />;
 }

@@ -1,13 +1,17 @@
 import type { FocusEvent } from "react";
-import type { HighlightDefinition, TrustLensTab } from "../state/appTypes";
+import type {
+  HighlightDefinition,
+  SourcePassage,
+  TrustLensTab,
+} from "../state/appTypes";
 
 interface InlineHighlightProps {
   highlight: HighlightDefinition;
   active: boolean;
+  source: SourcePassage | null;
   onAddToRecheck: () => void;
   onClear: () => void;
   onOpen: (highlightId: string) => void;
-  onOpenSourceModal: (sourceId: string | null, highlightId: string) => void;
   onShowInTrustLens: (tab: TrustLensTab) => void;
 }
 
@@ -23,13 +27,16 @@ const highlightStyles: Record<HighlightDefinition["kind"], string> = {
 export function InlineHighlight({
   highlight,
   active,
+  source,
   onAddToRecheck,
   onClear,
   onOpen,
-  onOpenSourceModal,
   onShowInTrustLens,
 }: InlineHighlightProps) {
   const popoverId = `popover-${highlight.id}`;
+  const sourcePageHref = highlight.sourceId
+    ? `/source/${encodeURIComponent(highlight.sourceId)}`
+    : null;
 
   const handleBlur = (event: FocusEvent<HTMLSpanElement>) => {
     if (!event.currentTarget.contains(event.relatedTarget)) {
@@ -71,20 +78,24 @@ export function InlineHighlight({
           <span className="mt-1 block text-tl-text-muted">{highlight.tooltipBody}</span>
           {highlight.kind === "source" ? (
             <span className="mt-2 block text-xs font-medium text-tl-text-soft">
-              Source: Mock research note, 2026
+              Source: {source?.title ?? highlight.sourceId ?? "Linked source"}
+              {source?.urlLabel ? (
+                <span className="mt-0.5 block break-all font-mono">
+                  {source.urlLabel}
+                </span>
+              ) : null}
             </span>
           ) : null}
           <span className="mt-3 flex flex-wrap gap-2">
-            {highlight.kind === "source" ? (
-              <button
+            {highlight.kind === "source" && sourcePageHref ? (
+              <a
                 className="focus-ring rounded-[8px] bg-tl-accent px-2.5 py-1.5 text-xs font-semibold text-tl-accent-ink"
-                type="button"
-                onClick={() =>
-                  onOpenSourceModal(highlight.sourceId ?? null, highlight.id)
-                }
+                href={sourcePageHref}
+                rel="noopener noreferrer"
+                target="_blank"
               >
-                View source passage
-              </button>
+                Open source page
+              </a>
             ) : null}
 
             {highlight.kind === "assumption" ? (

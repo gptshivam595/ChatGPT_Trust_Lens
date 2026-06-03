@@ -23,7 +23,6 @@ interface ChatAreaProps {
   onClearActiveTooltip: () => void;
   onCopyDraft: () => void;
   onOpenClaimsFromSummary: () => void;
-  onOpenSourceModal: (sourceId: string | null, highlightId: string) => void;
   onOpenMissingContextFromSummary: () => void;
   onSetActiveTooltip: (highlightId: string) => void;
   onShowInTrustLens: (tab: TrustLensTab) => void;
@@ -50,7 +49,6 @@ export function ChatArea({
   onClearActiveTooltip,
   onCopyDraft,
   onOpenClaimsFromSummary,
-  onOpenSourceModal,
   onOpenMissingContextFromSummary,
   onSetActiveTooltip,
   onShowInTrustLens,
@@ -157,12 +155,12 @@ export function ChatArea({
                 recheckProgressStep={state.recheckProgressStep}
                 recheckStatus={state.recheckStatus}
                 recheckSteps={state.recheckSteps}
+                sourcePassages={state.sourcePassages}
                 onAddMissingContextFromSummary={onOpenMissingContextFromSummary}
                 onAskAlternativeView={onAskAlternativeView}
                 onClearActiveTooltip={onClearActiveTooltip}
                 onCopyDraft={onCopyDraft}
                 onOpenClaimsFromSummary={onOpenClaimsFromSummary}
-                onOpenSourceModal={onOpenSourceModal}
                 onSetActiveTooltip={onSetActiveTooltip}
                 onShowInTrustLens={onShowInTrustLens}
                 onShowToast={onShowToast}

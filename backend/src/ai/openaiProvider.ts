@@ -358,7 +358,10 @@ const ensureHighlight = (
   const record = isRecord(value) ? value : { text: value };
   const kind = record.kind;
   const safeKind =
-    kind === "verify" || kind === "assumption" || kind === "product_logic"
+    kind === "source" ||
+    kind === "verify" ||
+    kind === "assumption" ||
+    kind === "product_logic"
       ? kind
       : "verify";
   const labels = {
@@ -380,7 +383,10 @@ const ensureHighlight = (
     tooltipBody: textValue(
       record.tooltipBody ?? record.reason,
       "Review this model-generated point before acting."
-    )
+    ),
+    ...(safeKind === "source" && typeof record.sourceId === "string"
+      ? { sourceId: record.sourceId }
+      : {})
   };
 };
 
@@ -814,7 +820,9 @@ export class OpenAiFinalAnswerGenerator implements FinalAnswerGenerator {
 Create a final answer JSON object with answerId, selectedDirectionId, blocks, highlights,
 and trustLens. Blocks must use heading, paragraph, section, or list shapes from the contract.
 Use highlight segments for 2-4 important claims. Every highlightId used in blocks must have a
-matching highlight object. trustLens must include summary, qualityRows, assumptions,
+matching highlight object. Use kind "verify" for claims that need verification. Use kind "source"
+with a sourceId only when the highlighted sentence is backed by a retrieved source passage.
+trustLens must include summary, qualityRows, assumptions,
 missingContext, claims, and alternatives. trustLens.qualityRows must contain exactly four rows:
 Correctness, Completeness, Reasoning Quality, and Uncertainty. Each quality row status must be
 Low, Medium, or High. The answer must directly respond to selectedPrompt.`,
