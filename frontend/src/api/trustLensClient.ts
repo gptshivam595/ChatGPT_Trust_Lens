@@ -342,17 +342,71 @@ function defaultTrustLensReview(): TrustLensReviewData {
   };
 }
 
+const qualitySignalAliases: Record<string, string[]> = {
+  correctness: ["correctness", "accuracy", "factuality", "truthfulness"],
+  completeness: ["completeness", "coverage", "thoroughness"],
+  "reasoning-quality": [
+    "reasoning_quality",
+    "reasoning",
+    "logic",
+    "logical_quality",
+    "coherence",
+    "reasonable",
+  ],
+  uncertainty: [
+    "uncertainty",
+    "uncertainity",
+    "uncertain",
+    "ambiguity",
+    "verification_need",
+  ],
+};
+
+function qualityKey(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function normalizeQualityValue(value: string) {
+  const lower = value.toLowerCase();
+  if (lower.includes("low")) return "Low";
+  if (lower.includes("high")) return "High";
+  return "Medium";
+}
+
+function normalizeQualitySignals(
+  rows: BackendTrustLensReviewData["qualityRows"],
+): QualitySignal[] {
+  const incomingRows = Array.isArray(rows) ? rows : [];
+
+  return qualitySignals.map((template) => {
+    const keys = new Set([
+      qualityKey(template.id),
+      qualityKey(template.label),
+      ...(qualitySignalAliases[template.id] ?? []),
+    ]);
+    const match = incomingRows.find((row) => {
+      return keys.has(qualityKey(row.id)) || keys.has(qualityKey(row.label));
+    });
+
+    return match
+      ? {
+          ...template,
+          value: normalizeQualityValue(match.status),
+          description: match.note || template.description,
+        }
+      : template;
+  });
+}
+
 function normalizeTrustLensReview(
   review: BackendTrustLensReviewData,
 ): TrustLensReviewData {
   return {
     summary: review.summary,
-    qualitySignals: review.qualityRows.map((row) => ({
-      id: row.id,
-      label: row.label,
-      value: row.status,
-      description: row.note,
-    })),
+    qualitySignals: normalizeQualitySignals(review.qualityRows),
     assumptions: review.assumptions,
     missingContext: review.missingContext.map((item) => ({
       id: item.id,

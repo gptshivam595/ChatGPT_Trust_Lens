@@ -529,15 +529,82 @@ const normalizeClaim = (value: unknown, index: number, selectedPrompt: string) =
   };
 };
 
+const finalQualityRowTemplates = [
+  {
+    id: "correctness",
+    label: "Correctness",
+    status: "Medium",
+    note: "Rates how correct the output appears based on the available prompt, context, and visible claims.",
+    aliases: ["correctness", "accuracy", "factuality", "truthfulness"]
+  },
+  {
+    id: "completeness",
+    label: "Completeness",
+    status: "Medium",
+    note: "Rates whether the output covers the important parts of the user's request.",
+    aliases: ["completeness", "coverage", "thoroughness"]
+  },
+  {
+    id: "reasoning-quality",
+    label: "Reasoning Quality",
+    status: "Medium",
+    note: "Rates whether the output's logic is clear, consistent, and reasonable.",
+    aliases: ["reasoning_quality", "reasoning", "logic", "logical_quality", "coherence", "reasonable"]
+  },
+  {
+    id: "uncertainty",
+    label: "Uncertainty",
+    status: "Medium",
+    note: "Rates how much ambiguity, missing evidence, or verification need remains.",
+    aliases: ["uncertainty", "uncertainity", "uncertain", "ambiguity", "verification_need"]
+  }
+] as const;
+
+const normalizeFinalQualityStatus = (value: unknown) => {
+  const candidate = textValue(value, "Medium");
+  const lower = candidate.toLowerCase();
+  if (lower.includes("low")) return "Low";
+  if (lower.includes("high")) return "High";
+  return "Medium";
+};
+
 const normalizeFinalQualityRow = (value: unknown, index: number) => {
   const record = isRecord(value) ? value : { note: value };
-  const label = textValue(record.label ?? record.name, `Quality check ${index + 1}`);
+  const label = textValue(record.label ?? record.name, "");
   return {
     id: slugify(record.id ?? label, `quality_openai_${index + 1}`),
     label,
-    status: textValue(record.status ?? record.value, "Needs verification"),
+    status: normalizeFinalQualityStatus(record.status ?? record.value ?? record.level),
     note: textValue(record.note ?? record.description, "Review this generated content before acting.")
   };
+};
+
+const normalizeFinalQualityRows = (value: unknown) => {
+  const rows = ensureObjectArray(value).map(normalizeFinalQualityRow);
+
+  return finalQualityRowTemplates.map(({ aliases, ...template }) => {
+    const match = rows.find((row) => {
+      const rowId = slugify(row.id, "");
+      const rowLabel = slugify(row.label, "");
+      const aliasValues: readonly string[] = aliases;
+      return (
+        rowId === template.id ||
+        rowLabel === template.id ||
+        aliasValues.includes(rowId) ||
+        aliasValues.includes(rowLabel)
+      );
+    });
+
+    return {
+      ...template,
+      ...(match
+        ? {
+            status: match.status,
+            note: match.note
+          }
+        : {})
+    };
+  });
 };
 
 const normalizeAssumption = (value: unknown, index: number) => {
@@ -600,7 +667,7 @@ const sanitizeFinalAnswer = (data: FinalAnswerResult, input: FinalAnswerInput) =
     highlightIds,
     fallbackAnswerText
   );
-  const qualityRows = ensureObjectArray(trustLens.qualityRows).map(normalizeFinalQualityRow);
+  const qualityRows = normalizeFinalQualityRows(trustLens.qualityRows);
   const assumptions = ensureObjectArray(trustLens.assumptions).map(normalizeAssumption);
   const missingContext = ensureObjectArray(trustLens.missingContext).map(normalizeMissingContext);
   const claims = ensureObjectArray(trustLens.claims).map((claim, index) =>
@@ -615,17 +682,7 @@ const sanitizeFinalAnswer = (data: FinalAnswerResult, input: FinalAnswerInput) =
     highlights: safeHighlights,
     trustLens: {
       summary: String(trustLens.summary ?? "Review generated answer before acting."),
-      qualityRows:
-        qualityRows.length > 0
-          ? qualityRows
-          : [
-              {
-                id: "quality_openai_1",
-                label: "Grounding",
-                status: "Needs verification",
-                note: "OpenAI generated this content from the prompt."
-              }
-            ],
+      qualityRows,
       assumptions,
       missingContext,
       claims:
@@ -758,7 +815,9 @@ Create a final answer JSON object with answerId, selectedDirectionId, blocks, hi
 and trustLens. Blocks must use heading, paragraph, section, or list shapes from the contract.
 Use highlight segments for 2-4 important claims. Every highlightId used in blocks must have a
 matching highlight object. trustLens must include summary, qualityRows, assumptions,
-missingContext, claims, and alternatives. The answer must directly respond to selectedPrompt.`,
+missingContext, claims, and alternatives. trustLens.qualityRows must contain exactly four rows:
+Correctness, Completeness, Reasoning Quality, and Uncertainty. Each quality row status must be
+Low, Medium, or High. The answer must directly respond to selectedPrompt.`,
       input
     );
 

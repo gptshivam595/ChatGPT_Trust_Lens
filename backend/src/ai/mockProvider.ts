@@ -332,20 +332,26 @@ export class MockFinalAnswerGenerator implements FinalAnswerGenerator {
           {
             id: "correctness",
             label: "Correctness",
-            status: "Medium confidence",
-            note: "The answer follows the documented product model but includes untested outcome claims."
+            status: "Medium",
+            note: "Rates how correct the output appears based on the available prompt, context, and visible claims."
           },
           {
             id: "completeness",
             label: "Completeness",
-            status: "Useful draft",
-            note: "It covers the main workflow, risks, and implementation direction."
+            status: "Medium",
+            note: "Rates whether the output covers the important parts of the user's request."
+          },
+          {
+            id: "reasoning-quality",
+            label: "Reasoning Quality",
+            status: "Medium",
+            note: "Rates whether the output's logic is clear, consistent, and reasonable."
           },
           {
             id: "uncertainty",
             label: "Uncertainty",
-            status: "Needs verification",
-            note: "Audience and behavior-change claims need evidence."
+            status: "Medium",
+            note: "Rates how much ambiguity, missing evidence, or verification need remains."
           }
         ],
         assumptions: [
